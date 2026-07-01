@@ -1,0 +1,41 @@
+{
+  "roc_auc": 0.8739951117524073,
+  "calibration_mae_vs_true_probability": 0.10851619576850464,
+  "classification_report": {
+    "0": {
+      "precision": 0.9921225382932166,
+      "recall": 0.9679760888129804,
+      "f1-score": 0.9799005835314458,
+      "support": 2342.0
+    },
+    "1": {
+      "precision": 0.34782608695652173,
+      "recall": 0.6896551724137931,
+      "f1-score": 0.4624277456647399,
+      "support": 58.0
+    },
+    "accuracy": 0.96125,
+    "macro avg": {
+      "precision": 0.6699743126248692,
+      "recall": 0.8288156306133867,
+      "f1-score": 0.7211641645980928,
+      "support": 2400.0
+    },
+    "weighted avg": {
+      "precision": 0.9765520407192466,
+      "recall": 0.96125,
+      "f1-score": 0.9673949899496671,
+      "support": 2400.0
+    }
+  },
+  "feature_importances": {
+    "methane_ppm": 0.36941082134738507,
+    "pressure_hpa": 0.49160505159959395,
+    "latitude": 0.057197086498902275,
+    "longitude": 0.08178704055411867
+  },
+  "n_train": 9600,
+  "n_test": 2400,
+  "positive_prevalence_train": 0.024270833333333332,
+  "positive_prevalence_test": 0.024166666666666666
+}

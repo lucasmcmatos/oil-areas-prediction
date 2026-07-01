@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Oil Probability Telemetry — OBSAT</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0a0e13;
+    --panel: #10151d;
+    --border: #1e2733;
+    --amber: #ff9f1c;
+    --teal: #3adbc1;
+    --red: #ff5a5a;
+    --text: #d7dee6;
+    --text-dim: #7c8a9a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  #map { flex: 1; height: 100vh; background: var(--bg); }
+
+  #panel {
+    width: 340px;
+    padding: 20px;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.15rem;
+    margin: 0;
+    color: var(--amber);
+    letter-spacing: 0.02em;
+  }
+
+  h1 span { color: var(--teal); }
+
+  .subtitle {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    margin-top: -12px;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .field label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .field label .value { color: var(--teal); }
+
+  input[type="range"] {
+    accent-color: var(--amber);
+    width: 100%;
+  }
+
+  input[type="number"] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    width: 100%;
+  }
+
+  button {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 0.85rem;
+    padding: 10px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+
+  button.primary {
+    background: var(--amber);
+    color: #14100a;
+    border-color: var(--amber);
+  }
+
+  button.secondary {
+    color: var(--teal);
+    border-color: var(--teal);
+  }
+
+  button:hover { filter: brightness(1.1); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  #result {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    min-height: 40px;
+    white-space: pre-wrap;
+    color: var(--text-dim);
+  }
+
+  #result.high { color: var(--red); border-color: var(--red); }
+  #result.moderate { color: var(--amber); border-color: var(--amber); }
+  #result.low { color: var(--teal); border-color: var(--teal); }
+
+  .legend {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .legend .row { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .dot.low { background: var(--teal); }
+  .dot.moderate { background: var(--amber); }
+  .dot.high { background: var(--red); }
+  .dot.anchor { background: #9aa5b1; }
+
+  #api-url {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--text-dim);
+  }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="panel">
+  <div>
+    <h1>OIL<span>SAT</span> // TELEMETRY</h1>
+    <div class="subtitle">CAMPOS &amp; SANTOS BASIN — METHANE/PRESSURE SURVEY</div>
+  </div>
+
+  <div class="field">
+    <label>METHANE (ppm) <span class="value" id="methane-value">1.90</span></label>
+    <input type="range" id="methane" min="1.7" max="2.6" step="0.01" value="1.90" />
+  </div>
+
+  <div class="field">
+    <label>PRESSURE (hPa) <span class="value" id="pressure-value">1013.0</span></label>
+    <input type="range" id="pressure" min="1010" max="1020" step="0.1" value="1013.0" />
+  </div>
+
+  <div class="field">
+    <label>LATITUDE</label>
+    <input type="number" id="latitude" step="0.0001" value="-25.20" />
+  </div>
+
+  <div class="field">
+    <label>LONGITUDE</label>
+    <input type="number" id="longitude" step="0.0001" value="-43.00" />
+  </div>
+
+  <div class="subtitle">Click the map to set latitude/longitude.</div>
+
+  <button class="primary" id="analyze-btn">ANALYZE POINT</button>
+  <button class="secondary" id="scan-btn">SCAN VISIBLE AREA</button>
+  <button id="clear-btn">CLEAR MARKERS</button>
+
+  <div id="result">Awaiting reading&hellip;</div>
+
+  <hr />
+
+  <div class="legend">
+    <div class="row"><span class="dot low"></span> &lt; 30% — low</div>
+    <div class="row"><span class="dot moderate"></span> 30–70% — moderate</div>
+    <div class="row"><span class="dot high"></span> &gt; 70% — high</div>
+    <div class="row"><span class="dot anchor"></span> known field (reference)</div>
+  </div>
+
+  <div id="api-url">API: <span id="api-url-text"></span></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const API_BASE = 'http://127.0.0.1:8000';
+  document.getElementById('api-url-text').textContent = API_BASE;
+
+  const OIL_FIELD_ANCHORS = {
+    'Tupi/Lula': [-25.20, -43.00],
+    'Buzios': [-25.30, -43.50],
+    'Sapinhoa': [-25.00, -43.30],
+    'Marlim': [-22.50, -40.30],
+    'Roncador': [-22.05, -40.10],
+    'Barracuda': [-22.35, -40.10],
+    'Jubarte': [-20.60, -39.80],
+    'Albacora': [-22.20, -40.30],
+  };
+
+  const map = L.map('map', { zoomControl: true }).setView([-23.5, -41.5], 7);
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    subdomains: 'abcd',
+    maxZoom: 19,
+  }).addTo(map);
+
+  for (const [name, [lat, lon]] of Object.entries(OIL_FIELD_ANCHORS)) {
+    L.circleMarker([lat, lon], {
+      radius: 5,
+      color: '#9aa5b1',
+      fillColor: '#9aa5b1',
+      fillOpacity: 0.9,
+    }).bindTooltip(name).addTo(map);
+  }
+
+  const methaneInput = document.getElementById('methane');
+  const pressureInput = document.getElementById('pressure');
+  const methaneValue = document.getElementById('methane-value');
+  const pressureValue = document.getElementById('pressure-value');
+  const latitudeInput = document.getElementById('latitude');
+  const longitudeInput = document.getElementById('longitude');
+  const resultBox = document.getElementById('result');
+
+  methaneInput.addEventListener('input', () => {
+    methaneValue.textContent = parseFloat(methaneInput.value).toFixed(2);
+  });
+  pressureInput.addEventListener('input', () => {
+    pressureValue.textContent = parseFloat(pressureInput.value).toFixed(1);
+  });
+
+  let readingMarker = null;
+  const scanMarkers = [];
+
+  map.on('click', (event) => {
+    latitudeInput.value = event.latlng.lat.toFixed(4);
+    longitudeInput.value = event.latlng.lng.toFixed(4);
+  });
+
+  function colorForClassification(classification) {
+    if (classification === 'high') return '#ff5a5a';
+    if (classification === 'moderate') return '#ff9f1c';
+    return '#3adbc1';
+  }
+
+  function setResult(text, classification) {
+    resultBox.textContent = text;
+    resultBox.className = classification || '';
+  }
+
+  async function analyzePoint() {
+    const payload = {
+      latitude: parseFloat(latitudeInput.value),
+      longitude: parseFloat(longitudeInput.value),
+      methane_ppm: parseFloat(methaneInput.value),
+      pressure_hpa: parseFloat(pressureInput.value),
+    };
+
+    setResult('Querying model...', '');
+
+    try {
+      const response = await fetch(`${API_BASE}/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+
+      if (readingMarker) map.removeLayer(readingMarker);
+      readingMarker = L.circleMarker([payload.latitude, payload.longitude], {
+        radius: 9,
+        color: colorForClassification(data.classification),
+        fillColor: colorForClassification(data.classification),
+        fillOpacity: 0.85,
+      }).addTo(map);
+
+      setResult(
+        `OIL PROBABILITY: ${data.oil_probability_percent}%\nCLASS: ${data.classification.toUpperCase()}\nLAT ${payload.latitude.toFixed(4)}  LON ${payload.longitude.toFixed(4)}`,
+        data.classification
+      );
+    } catch (error) {
+      setResult(`ERROR: ${error.message}\nIs the API running at ${API_BASE}?`, '');
+    }
+  }
+
+  async function scanVisibleArea() {
+    const bounds = map.getBounds();
+    const gridSize = 12;
+    const points = [];
+    for (let i = 0; i < gridSize; i++) {
+      for (let j = 0; j < gridSize; j++) {
+        const lat = bounds.getSouth() + (bounds.getNorth() - bounds.getSouth()) * (i / (gridSize - 1));
+        const lon = bounds.getWest() + (bounds.getEast() - bounds.getWest()) * (j / (gridSize - 1));
+        points.push({
+          latitude: lat,
+          longitude: lon,
+          methane_ppm: parseFloat(methaneInput.value),
+          pressure_hpa: parseFloat(pressureInput.value),
+        });
+      }
+    }
+
+    setResult(`Scanning ${points.length} points...`, '');
+
+    try {
+      const response = await fetch(`${API_BASE}/predict/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(points),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const results = await response.json();
+
+      scanMarkers.forEach((marker) => map.removeLayer(marker));
+      scanMarkers.length = 0;
+
+      results.forEach((result, index) => {
+        const point = points[index];
+        const marker = L.circleMarker([point.latitude, point.longitude], {
+          radius: 5,
+          color: colorForClassification(result.classification),
+          fillColor: colorForClassification(result.classification),
+          fillOpacity: 0.6,
+          weight: 1,
+        }).bindTooltip(`${result.oil_probability_percent}%`);
+        marker.addTo(map);
+        scanMarkers.push(marker);
+      });
+
+      setResult(`Scan complete: ${points.length} points plotted.`, '');
+    } catch (error) {
+      setResult(`ERROR: ${error.message}\nIs the API running at ${API_BASE}?`, '');
+    }
+  }
+
+  function clearMarkers() {
+    if (readingMarker) { map.removeLayer(readingMarker); readingMarker = null; }
+    scanMarkers.forEach((marker) => map.removeLayer(marker));
+    scanMarkers.length = 0;
+    setResult('Awaiting reading...', '');
+  }
+
+  document.getElementById('analyze-btn').addEventListener('click', analyzePoint);
+  document.getElementById('scan-btn').addEventListener('click', scanVisibleArea);
+  document.getElementById('clear-btn').addEventListener('click', clearMarkers);
+</script>
+
+</body>
+</html>
