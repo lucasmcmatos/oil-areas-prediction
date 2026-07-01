@@ -21,27 +21,72 @@
 
   * { box-sizing: border-box; }
 
-  body {
+  html, body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
     font-family: 'Inter', sans-serif;
-    display: flex;
-    height: 100vh;
+    height: 100%;
     overflow: hidden;
   }
 
-  #map { flex: 1; height: 100vh; background: var(--bg); }
+  body {
+    display: flex;
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  #map { flex: 1; height: 100%; background: var(--bg); }
 
   #panel {
     width: 340px;
+    flex-shrink: 0;
     padding: 20px;
     background: var(--panel);
     border-left: 1px solid var(--border);
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     display: flex;
     flex-direction: column;
     gap: 18px;
+  }
+
+  /* Phones / narrow viewports: stack map above a scrollable control panel
+     instead of a fixed side column, and enlarge touch targets. */
+  @media (max-width: 768px) {
+    body {
+      flex-direction: column;
+      overflow: auto;
+    }
+
+    #map {
+      flex: none;
+      height: 45vh;
+      height: 45dvh;
+      width: 100%;
+    }
+
+    #panel {
+      width: 100%;
+      flex: 1;
+      border-left: none;
+      border-top: 1px solid var(--border);
+      overflow-y: visible;
+    }
+
+    button {
+      padding: 14px;
+      font-size: 0.95rem;
+    }
+
+    input[type="range"] {
+      height: 28px;
+    }
+
+    input[type="number"] {
+      padding: 10px 8px;
+      font-size: 0.9rem;
+    }
   }
 
   h1 {
@@ -212,7 +257,9 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-  const API_BASE = 'http://127.0.0.1:8000';
+  // Same-origin: works from any host/IP the page was loaded from (laptop,
+  // LAN IP for a phone on the same network, or a future public deployment).
+  const API_BASE = window.location.origin;
   document.getElementById('api-url-text').textContent = API_BASE;
 
   const OIL_FIELD_ANCHORS = {
