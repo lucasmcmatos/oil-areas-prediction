@@ -19,6 +19,5 @@ __pycache__/
 .idea/
 
 # Claude Code / AI assistant artifacts (not part of the OBSAT deliverable)
-CLAUDE.md
 .claude/
 .claude-*
