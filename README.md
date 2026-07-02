@@ -100,7 +100,61 @@ dos poços perfurados em áreas com anomalia positiva confirmada resultaram em d
 comercial**, contra **~14% em áreas sem anomalia associada**. Este dado motiva o uso
 de anomalias de microsseepage como sinal preditivo, mesmo em dataset sintético.
 
-### 6. Limitações Explícitas (transparência para avaliadores)
+### 6. Fontes de Metano Não-Associadas a Petróleo (interferências regionais)
+
+Um problema identificado experimentalmente é que um modelo treinado apenas com
+metano de microsseepage aprende a regra simplificada `metano elevado → petróleo`,
+ignorando a localização geográfica (importância de lat/lon < 7% vs. ~94% para
+metano+pressão). Isso ocorre porque no dataset sintético original, **metano elevado
+só existe próximo a campos de petróleo** — o modelo nunca viu "metano alto sem petróleo".
+
+Na realidade, o metano atmosférico tem múltiplas fontes **não relacionadas a petróleo**,
+documentadas em inventários globais (Saunois et al., 2020). Para o Maranhão — estado
+onde ocorre a OBSAT — as principais são:
+
+#### 6.1 Baixada Maranhense — Wetlands e Rizicultura
+
+A Baixada Maranhense (~13.000 km², sítio Ramsar MA-001) é uma das maiores planícies
+de inundação sazonais do Brasil, localizada em lat ∈ [−5°, −2°], lon ∈ [−46.5°, −43.5°].
+A inundação sazonal (jan–jul) cria condições anaeróbicas ideais para metanogênese
+bacteriana. Somada à extensa rizicultura inundada da região — o Maranhão é um dos
+maiores produtores de arroz do Brasil —, a Baixada é fonte de CH₄ biogênico mensurável
+por satélite (Yan et al., 2009).
+
+#### 6.2 Delta do Parnaíba — Wetlands Costeiros (MA/PI)
+
+O Delta do Parnaíba, na fronteira MA/PI (lat ∈ [−3°, −2.4°], lon ∈ [−42.8°, −41.5°]),
+forma extensas áreas de manguezais e pântanos costeiros com emissão contínua de CH₄
+por decomposição anaeróbica de matéria orgânica (Melack & Hess, 2010).
+
+#### 6.3 Transição Amazônia/Cerrado — Norte do MA
+
+A porção norte do Maranhão e o litoral do Pará/Amapá (lat > −1°) estão na zona de
+influência de wetlands amazônicos — a maior fonte natural de metano do planeta,
+responsável por ~30% das emissões globais (Saunois et al., 2020). Queimadas sazonais
+no Cerrado maranhense também contribuem com CH₄ de combustão.
+
+#### 6.4 Pecuária e Uso do Solo — Interior do MA
+
+O Maranhão possui um dos maiores rebanhos bovinos do NE brasileiro. A fermentação
+entérica e o manejo de dejetos são fontes significativas de CH₄ difuso no interior
+do estado (lat ∈ [−9°, −4°], lon ∈ [−47°, −43°]), quantificadas nos inventários
+nacionais do SEEG/MCTI.
+
+#### 6.5 Área Urbana de São Luís
+
+Aterros sanitários, tratamento de esgoto e emissões fugitivas industriais elevam
+o CH₄ local na região da Grande São Luís (lat ∈ [−2.75°, −2.35°],
+lon ∈ [−44.45°, −44.05°]), conforme metodologia IPCC Tier 1 (2006).
+
+#### Impacto no Modelo
+
+Ao adicionar esses componentes ao dataset, amostras da Baixada Maranhense, do Delta
+do Parnaíba e de áreas urbanas passam a ter metano elevado **com rótulo 0** (sem
+petróleo). O modelo é forçado a aprender que `metano alto ≠ petróleo por si só` —
+a localização passa a ser discriminativa, aumentando o peso de lat/lon na decisão.
+
+### 7. Limitações Explícitas (transparência para avaliadores)
 
 Os princípios físicos acima são reais e fundamentados na literatura. As **simplificações
 didáticas** adotadas — e que devem ser declaradas explicitamente no relatório — são:
@@ -334,21 +388,18 @@ busca de hiperparâmetros, avaliação no conjunto de teste e ensemble.
 
 #### Etapa 1 — Validação Cruzada Baseline (5-fold estratificado, hiperparâmetros padrão)
 
-A validação cruzada estratificada em 5 folds (Stratified K-Fold) garante que
-cada fold preserve a proporção de positivos (~3.3%), fornecendo estimativas
-de desempenho mais robustas e com quantificação de variância (±std).
-Dataset: 30.000 amostras, 24.000 treino / 6.000 teste, prevalência 3.28%.
+A validação cruzada estratificada em 5 folds (Stratified K-Fold) garante que cada fold
+preserve a proporção de positivos (~3.3%). Dataset: 30.000 amostras com fontes
+biogênicas de metano incluídas, 24.000 treino / 6.000 teste, prevalência 3.28%.
 
 | Modelo | ROC-AUC (média ± std) | AP (média ± std) |
 |---|---|---|
-| Random Forest | 0.7740 ± 0.0336 | 0.4491 ± 0.0576 |
-| Gradient Boosting | 0.7731 ± 0.0309 | 0.4413 ± 0.0582 |
-| Logistic Regression | **0.7862 ± 0.0382** | **0.4627 ± 0.0627** |
+| Random Forest | **0.7958 ± 0.0312** | **0.4499 ± 0.0538** |
+| Gradient Boosting | 0.7875 ± 0.0290 | 0.4477 ± 0.0599 |
+| Logistic Regression | 0.7948 ± 0.0307 | 0.4456 ± 0.0622 |
 
-A Regressão Logística lidera novamente em CV, confirmando componente linearizável
-no sinal. O GB apresenta menor desvio-padrão (0.031), indicando maior estabilidade.
-A redução de ~0.88 para ~0.78 em relação ao modelo Campos/Santos é esperada: o
-problema é genuinamente mais difícil com 10× mais área e sinal mais difuso.
+Os três modelos são competitivos em CV baseline, com RF levemente à frente.
+O GB apresenta menor desvio-padrão (0.029), indicando maior estabilidade entre folds.
 
 #### Etapa 2 — Busca de Hiperparâmetros (RandomizedSearchCV)
 
@@ -357,60 +408,61 @@ problema é genuinamente mais difícil com 10× mais área e sinal mais difuso.
 
 | Modelo | Melhor CV ROC-AUC | Melhores hiperparâmetros |
 |---|---|---|
-| Random Forest | 0.7899 | max_depth=4, min_samples_leaf=5, max_features='sqrt', n_estimators=200 |
-| Gradient Boosting | 0.7897 | max_depth=3, learning_rate=0.2, min_samples_leaf=10, max_iter=500 |
-| Logistic Regression | 0.7863 | C=0.1 |
-
-Os três modelos convergem para valores de ROC-AUC próximos após tuning (~0.789),
-evidenciando que o ganho marginal do tuning foi moderado — o gargalo está na
-dificuldade intrínseca do problema (sinal difuso em grande escala geográfica),
-não nos hiperparâmetros.
+| Random Forest | **0.8071** | max_depth=4, min_samples_leaf=5, max_features='sqrt', n_estimators=200 |
+| Gradient Boosting | 0.7992 | max_depth=3, learning_rate=0.05, min_samples_leaf=30, l2_reg=0.1, max_iter=300 |
+| Logistic Regression | 0.7948 | C=0.01, max_iter=2000 |
 
 #### Etapa 3 — Avaliação no Conjunto de Teste (modelos tunados)
 
 | Modelo | ROC-AUC ↑ | Avg Precision ↑ | Brier Score ↓ | Calibration MAE ↓ |
 |---|---|---|---|---|
-| Random Forest (tunado) | 0.7832 | 0.4166 | 0.1204 | 0.3013 |
-| Gradient Boosting (tunado) | 0.7923 | 0.4110 | **0.1140** | **0.2781** |
-| Logistic Regression (tunada) | 0.7833 | 0.4152 | 0.1408 | 0.3191 |
-| **Ensemble soft voting** | **0.7930** | **0.4211** | 0.1215 | 0.2995 |
+| Random Forest (tunado) | 0.8320 | 0.4795 | 0.1179 | 0.2955 |
+| Gradient Boosting (tunado) | **0.8361** | **0.4916** | **0.1166** | **0.2903** |
+| Logistic Regression (tunada) | 0.8116 | 0.4597 | 0.1448 | 0.3226 |
+| Ensemble soft voting | 0.8316 | 0.4866 | 0.1228 | 0.3028 |
 
-**Observações:**
+#### Etapa 4 — Importâncias de Features (RF tunado)
 
-- O **ensemble** superou todos os modelos individuais em ROC-AUC (0.7930) e AP
-  (0.4211) — diferente do resultado anterior, onde os modelos eram mais correlacionados.
-  Com o dataset expandido e mais diverso, os três modelos erram em regiões diferentes
-  do espaço geográfico, tornando a combinação mais eficaz (Dietterich, 2000).
-- O **Gradient Boosting** continua com a melhor calibração (Brier 0.114, CalMAE 0.278),
-  mantendo o trade-off discriminação vs. calibração observado anteriormente.
-- A redução de ROC-AUC (0.87 → 0.79) é explicável e defensável: o modelo agora cobre
-  toda a costa brasileira com sinal mais difuso (escalas 80/100 km vs. 35/45 km) — um
-  problema genuinamente mais difícil, não uma falha de modelagem.
+| Feature | Importância | Variação vs. modelo anterior |
+|---|---|---|
+| pressure_hpa | **63.5%** | ↑ de 35.2% |
+| methane_ppm | 22.4% | ↓ de 58.5% |
+| latitude | 7.9% | ↑ de 1.8% |
+| longitude | 6.2% | ↑ de 4.5% |
+| **Localização total** | **14.1%** | **↑ de 6.3%** |
 
-#### Etapa 4 — Limiar de Decisão Ótimo (curva Precisão-Recall)
+A adição de fontes biogênicas de CH₄ produziu dois efeitos importantes:
 
-Para datasets desbalanceados, o limiar padrão de 0.5 é subótimo. A curva
-Precisão-Recall foi usada para encontrar o limiar que maximiza F1 para o GB:
+1. **Metano perdeu dominância** (58.5% → 22.4%): como agora há amostras com CH₄
+   elevado mas sem petróleo (Baixada Maranhense, Delta do Parnaíba, etc.), o modelo
+   aprendeu que CH₄ alto não é condição suficiente para petróleo.
+
+2. **Pressão tornou-se o sinal primário** (35.2% → 63.5%): a pressão segue o sinal
+   de sobrepressão associado a acumulações de hidrocarbonetos, sem interferência de
+   fontes biogênicas — o modelo corretamente passou a confiar mais nela. Isso é
+   consistente com a literatura geológica: anomalias de pressão são consideradas
+   indicadores mais específicos de petróleo do que CH₄ isolado (Osborne &
+   Swarbrick, 1997).
+
+3. **Importância geográfica dobrou** (6.3% → 14.1%): lat/lon passou a discriminar
+   ambientes (wetland vs. costa petrolífera) onde metano elevado tem interpretações
+   opostas.
+
+#### Etapa 5 — Limiar de Decisão Ótimo (curva Precisão-Recall)
 
 | Limiar | F1 no conjunto de teste |
 |---|---|
 | 0.5 (padrão) | — |
-| **0.8986 (ótimo)** | **0.4971** |
+| **0.9086 (ótimo)** | **0.5215** |
 
-O limiar elevado (0.899) reflete que, com ~3.3% de positivos, o modelo precisa de
-alta confiança para predizer positivo e manter precisão aceitável. O dashboard usa
-a probabilidade contínua, tornando o limiar relevante apenas para as classificações
-textuais (low / moderate / high).
+O limiar elevado reflete o desbalanceamento: ~3.3% de positivos exige alta confiança
+antes de predizer positivo. O dashboard usa probabilidade contínua, não rótulo binário.
 
-**Nota sobre interpretação do Average Precision:** Para datasets desbalanceados, o
-baseline de um classificador aleatório em AP é igual à prevalência de positivos
-(~3.3%, não 50%). O AP de 0.4211 do ensemble representa, portanto, **~13× o desempenho
-aleatório** — o modelo concentra verdadeiros positivos no topo do ranking de forma
-muito superior ao acaso.
+**Nota sobre interpretação do Average Precision:** O baseline aleatório em AP é igual
+à prevalência (~3.3%). O AP de 0.4916 do GB representa **~15× o desempenho aleatório**.
 
 **Modelo adotado na API:** Gradient Boosting tunado (`gradient_boosting_model.joblib`),
-por apresentar a melhor calibração (Brier 0.114, CalMAE 0.278) — critério prioritário
-para uma aplicação que exibe probabilidades percentuais ao usuário.
+melhor em ROC-AUC, AP e calibração simultaneamente nesta versão.
 
 ---
 
@@ -445,6 +497,28 @@ para uma aplicação que exibe probabilidades percentuais ao usuário.
 - Schumacher, D. (2000). Integrating geochemical surveys with 3D seismic data to
   identify new drilling targets: Examples from the Gulf of Mexico. In *AAPG Annual
   Convention Proceedings*. American Association of Petroleum Geologists.
+
+**Emissões de Metano e Fontes Biogênicas**
+
+- IPCC. (2006). *2006 IPCC Guidelines for National Greenhouse Gas Inventories,
+  Volume 4: Agriculture, Forestry and Other Land Use*. Institute for Global
+  Environmental Strategies (IGES), Japan.
+
+- Melack, J. M., & Hess, L. L. (2010). Remote sensing of the distribution and
+  extent of wetlands in the Amazon basin. In W. J. Junk, M. T. F. Piedade,
+  F. Wittmann, J. Schöngart, & P. Parolin (Eds.), *Amazonian Floodplain Forests*
+  (pp. 43–59). Springer. https://doi.org/10.1007/978-90-481-8725-6_3
+
+- Saunois, M., Stavert, A. R., Poulter, B., Bousquet, P., Canadell, J. G.,
+  Jackson, R. B., … Zhuang, Q. (2020). The global methane budget 2000–2017.
+  *Earth System Science Data*, 12(3), 1561–1623.
+  https://doi.org/10.5194/essd-12-1561-2020
+
+- Yan, X., Akiyama, H., Yagi, K., & Akimoto, H. (2009). Global estimations of
+  the inventory and mitigation potential of methane emissions from rice cultivation
+  conducted using the 2006 intergovernmental panel on climate change guidelines.
+  *Global Biogeochemical Cycles*, 23(2), GB2002.
+  https://doi.org/10.1029/2008GB003299
 
 **Aprendizado de Máquina**
 

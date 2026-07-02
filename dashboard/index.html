@@ -212,7 +212,7 @@
 <div id="panel">
   <div>
     <h1>OIL<span>SAT</span> // TELEMETRY</h1>
-    <div class="subtitle">CAMPOS &amp; SANTOS BASIN — METHANE/PRESSURE SURVEY</div>
+    <div class="subtitle">BRAZILIAN COAST — METHANE/PRESSURE SURVEY</div>
   </div>
 
   <div class="field">
@@ -263,14 +263,21 @@
   document.getElementById('api-url-text').textContent = API_BASE;
 
   const OIL_FIELD_ANCHORS = {
-    'Tupi/Lula': [-25.20, -43.00],
-    'Buzios': [-25.30, -43.50],
-    'Sapinhoa': [-25.00, -43.30],
-    'Marlim': [-22.50, -40.30],
-    'Roncador': [-22.05, -40.10],
-    'Barracuda': [-22.35, -40.10],
-    'Jubarte': [-20.60, -39.80],
-    'Albacora': [-22.20, -40.30],
+    'Tupi/Lula':           [-25.20, -43.00],
+    'Búzios':              [-25.30, -43.50],
+    'Sapinhoá':            [-25.00, -43.30],
+    'Marlim':              [-22.50, -40.30],
+    'Roncador':            [-22.05, -40.10],
+    'Barracuda':           [-22.35, -40.10],
+    'Albacora':            [-22.20, -40.30],
+    'Jubarte':             [-20.60, -39.80],
+    'Camarupim':           [-19.80, -39.50],
+    'Camamu':              [-13.80, -38.80],
+    'Sergipe-Alagoas':     [-10.50, -36.50],
+    'Potiguar Offshore':   [ -4.00, -36.80],
+    'Potiguar Onshore':    [ -5.10, -36.50],
+    'Ceará':               [ -3.20, -38.50],
+    'Barreirinhas':        [ -2.50, -42.50],
   };
 
   const map = L.map('map', { zoomControl: true }).setView([-23.5, -41.5], 7);
@@ -305,7 +312,7 @@
     pressureValue.textContent = parseFloat(pressureInput.value).toFixed(1);
   });
 
-  let readingMarker = null;
+  const readingMarkers = [];
   const scanMarkers = [];
 
   map.on('click', (event) => {
@@ -343,13 +350,15 @@
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
 
-      if (readingMarker) map.removeLayer(readingMarker);
-      readingMarker = L.circleMarker([payload.latitude, payload.longitude], {
+      const marker = L.circleMarker([payload.latitude, payload.longitude], {
         radius: 9,
         color: colorForClassification(data.classification),
         fillColor: colorForClassification(data.classification),
         fillOpacity: 0.85,
-      }).addTo(map);
+      }).bindTooltip(
+        `${data.oil_probability_percent}% — ${data.classification.toUpperCase()}`
+      ).addTo(map);
+      readingMarkers.push(marker);
 
       setResult(
         `OIL PROBABILITY: ${data.oil_probability_percent}%\nCLASS: ${data.classification.toUpperCase()}\nLAT ${payload.latitude.toFixed(4)}  LON ${payload.longitude.toFixed(4)}`,
@@ -411,8 +420,9 @@
   }
 
   function clearMarkers() {
-    if (readingMarker) { map.removeLayer(readingMarker); readingMarker = null; }
-    scanMarkers.forEach((marker) => map.removeLayer(marker));
+    readingMarkers.forEach((m) => map.removeLayer(m));
+    readingMarkers.length = 0;
+    scanMarkers.forEach((m) => map.removeLayer(m));
     scanMarkers.length = 0;
     setResult('Awaiting reading...', '');
   }

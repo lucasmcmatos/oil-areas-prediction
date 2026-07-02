@@ -116,6 +116,75 @@ def sigmoid(x: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-x))
 
 
+def biogenic_methane_anomaly(
+    latitude: np.ndarray, longitude: np.ndarray, rng: np.random.Generator
+) -> np.ndarray:
+    """Non-petroleum methane from wetlands, agriculture, and urban sources.
+
+    Each region is based on documented CH4 emission sources in the Brazilian
+    NE coast — in particular Maranhão (MA), where the OBSAT will take place.
+    These contributions are ADDED to atmospheric background but are NOT
+    correlated with oil presence, so the model must learn to use geographic
+    location to distinguish oil-seepage anomalies from biogenic interference.
+
+    Sources and scientific basis:
+    - Baixada Maranhense (wetlands + rice): Saunois et al. (2020); Ramsar site MA-001.
+      One of Brazil's largest seasonal floodplain systems (~13,000 km²). Anaerobic
+      decomposition in flooded soils and submerged rice paddies are significant CH4
+      emitters (Yan et al., 2009).
+    - Delta do Parnaíba (MA/PI coastal wetlands): Melack & Hess (2010). Extensive
+      tidal wetlands and estuaries generate biogenic methane year-round.
+    - Amazon/Cerrado transition (northern MA, PA): Saunois et al. (2020). Tropical
+      wetlands are the single largest natural CH4 source globally (~30% of emissions).
+    - Cerrado interior (cattle ranching, soy, fires): MCTI/SEEG Brazil inventories.
+      Enteric fermentation from MA's large cattle herd and land-use change fires
+      contribute measurable CH4 locally.
+    - São Luís urban core: IPCC (2006) Tier 1 estimates. Landfills, wastewater
+      treatment, and industrial fugitive emissions elevate urban CH4.
+    - Global low-level anthropogenic baseline: diffuse contribution everywhere
+      (fossil fuel infrastructure, biomass burning transport).
+    """
+    anomaly = np.zeros(len(latitude))
+
+    # Baixada Maranhense — seasonal floodplain + rice paddies (western MA)
+    mask = (
+        (latitude >= -5.0) & (latitude <= -2.0) &
+        (longitude >= -46.5) & (longitude <= -43.5)
+    )
+    anomaly[mask] += rng.uniform(0.04, 0.20, int(mask.sum()))
+
+    # Delta do Parnaíba — coastal wetlands at MA/PI border
+    mask = (
+        (latitude >= -3.0) & (latitude <= -2.4) &
+        (longitude >= -42.8) & (longitude <= -41.5)
+    )
+    anomaly[mask] += rng.uniform(0.03, 0.13, int(mask.sum()))
+
+    # Amazon / northern Cerrado transition (northern part of bbox: north MA, PA, AP)
+    mask = latitude > -1.0
+    anomaly[mask] += rng.uniform(0.05, 0.25, int(mask.sum()))
+
+    # Cerrado interior — cattle ranching and agricultural fires (central/south MA)
+    mask = (
+        (latitude >= -9.0) & (latitude <= -4.0) &
+        (longitude >= -47.0) & (longitude <= -43.0)
+    )
+    anomaly[mask] += rng.uniform(0.02, 0.10, int(mask.sum()))
+
+    # São Luís urban core — landfills, wastewater, industrial fugitives
+    mask = (
+        (latitude >= -2.75) & (latitude <= -2.35) &
+        (longitude >= -44.45) & (longitude <= -44.05)
+    )
+    anomaly[mask] += rng.uniform(0.02, 0.08, int(mask.sum()))
+
+    # Diffuse global anthropogenic baseline (fossil fuel infrastructure, biomass
+    # burning transport) — small but present everywhere
+    anomaly += rng.exponential(0.015, len(latitude))
+
+    return anomaly
+
+
 def generate_dataset(
     n_samples: int = N_SAMPLES, random_state: int = RANDOM_STATE
 ) -> pd.DataFrame:
@@ -128,9 +197,11 @@ def generate_dataset(
     methane_anomaly = METHANE_ANOMALY_AMPLITUDE_PPM * np.exp(
         -distance_km / METHANE_DECAY_SCALE_KM
     )
+    non_oil_methane = biogenic_methane_anomaly(latitude, longitude, rng)
     methane_ppm = (
         METHANE_BACKGROUND_PPM
         + methane_anomaly
+        + non_oil_methane
         + rng.normal(0, METHANE_NOISE_STD_PPM, n_samples)
     )
 
@@ -161,6 +232,7 @@ def generate_dataset(
             "methane_ppm": methane_ppm,
             "pressure_hpa": pressure_hpa,
             "distance_to_nearest_field_km": distance_km,
+            "non_oil_methane_contribution": non_oil_methane,  # analysis only
             "true_probability": true_probability,
             "label": label,
         }
@@ -178,6 +250,8 @@ def main() -> None:
     print(f"Positive label prevalence: {df['label'].mean():.4%}")
     print(f"methane_ppm: mean={df['methane_ppm'].mean():.4f}, std={df['methane_ppm'].std():.4f}")
     print(f"pressure_hpa: mean={df['pressure_hpa'].mean():.4f}, std={df['pressure_hpa'].std():.4f}")
+    print(f"non_oil_methane: mean={df['non_oil_methane_contribution'].mean():.4f}, "
+          f"max={df['non_oil_methane_contribution'].max():.4f}")
 
 
 if __name__ == "__main__":
