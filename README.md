@@ -275,44 +275,95 @@ Quatro métricas foram utilizadas, cada uma capturando um aspecto diferente de q
 
 ---
 
-### Resultados Comparativos
+### Pipeline de Treinamento e Resultados
 
-Todos os modelos avaliados no mesmo conjunto de teste (2.400 amostras, 2.42% positivos):
+O pipeline de modelagem seguiu quatro etapas: validação cruzada baseline,
+busca de hiperparâmetros, avaliação no conjunto de teste e ensemble.
+
+#### Etapa 1 — Validação Cruzada Baseline (5-fold estratificado, hiperparâmetros padrão)
+
+A validação cruzada estratificada em 5 folds (Stratified K-Fold) garante que
+cada fold preserve a proporção de positivos (~2.4%), fornecendo estimativas
+de desempenho mais robustas e com quantificação de variância (±std).
+
+| Modelo | ROC-AUC (média ± std) | AP (média ± std) |
+|---|---|---|
+| Random Forest | 0.8868 ± 0.0230 | 0.5587 ± 0.0517 |
+| Gradient Boosting | 0.8856 ± 0.0190 | 0.5219 ± 0.0509 |
+| Logistic Regression | **0.9061 ± 0.0306** | **0.5724 ± 0.0628** |
+
+Observação notável: a Regressão Logística apresentou o maior ROC-AUC médio em
+validação cruzada — indicando que as relações entre features e rótulo têm
+componente linearizável suficientemente forte no espaço transformado pelo
+StandardScaler. O GB apresenta menor desvio-padrão (0.019), sugerindo maior
+estabilidade entre folds.
+
+#### Etapa 2 — Busca de Hiperparâmetros (RandomizedSearchCV)
+
+`RandomizedSearchCV` com 30 iterações e 5-fold CV, otimizando ROC-AUC.
+A busca amostrou aleatoriamente combinações dos espaços de parâmetros definidos
+para cada modelo, reduzindo o custo computacional em relação ao GridSearchCV
+sem sacrificar qualidade (Bergstra & Bengio, 2012).
+
+| Modelo | Melhor CV ROC-AUC | Melhores hiperparâmetros |
+|---|---|---|
+| Random Forest | 0.9062 | max_depth=4, min_samples_leaf=10, max_features='log2', n_estimators=300 |
+| Gradient Boosting | 0.8982 | max_depth=4, learning_rate=0.01, min_samples_leaf=5, l2_reg=1.0, max_iter=300 |
+| Logistic Regression | **0.9065** | C=0.01 |
+
+Os melhores hiperparâmetros encontrados são consistentemente mais **regularizados**
+do que os padrões (RF com max_depth=4 vs. 8; GB com learning_rate=0.01 vs. 0.05;
+LR com C=0.01 vs. 1.0), refletindo que o espaço de busca favoreceu modelos com
+menor variância para este dataset de tamanho moderado (9.600 amostras de treino).
+
+#### Etapa 3 — Avaliação no Conjunto de Teste (modelos tunados)
 
 | Modelo | ROC-AUC ↑ | Avg Precision ↑ | Brier Score ↓ | Calibration MAE ↓ |
 |---|---|---|---|---|
-| Random Forest | **0.8740** | 0.5102 | 0.0408 | 0.1085 |
-| Gradient Boosting | 0.8516 | **0.5556** | **0.0259** | **0.0357** |
-| Logistic Regression | 0.8580 | 0.5564 | 0.0739 | 0.1934 |
-| **Ensemble (soft voting)** | 0.8554 | 0.5492 | 0.0386 | 0.1115 |
+| Random Forest (tunado) | **0.8604** | 0.5147 | 0.0578 | 0.1663 |
+| Gradient Boosting (tunado) | 0.8556 | 0.4998 | **0.0568** | 0.1673 |
+| Logistic Regression (tunada) | 0.8580 | **0.5559** | 0.0741 | 0.1971 |
+| **Ensemble soft voting** | 0.8546 | 0.5386 | 0.0604 | 0.1769 |
 
 **Observações:**
 
-- **Random Forest** tem a maior capacidade discriminativa (ROC-AUC 0.874), consistente
-  com o resultado do protótipo original (AUC 0.87).
-- **Gradient Boosting** se destaca na **calibração**: Brier Score de 0.026 e
-  Calibration MAE de 0.036 — muito superior aos demais. Para uma aplicação que exibe
-  probabilidades percentuais ao usuário, este é o indicador mais crítico.
-- **Regressão Logística** é surpreendentemente competitiva em AP (0.556) e ROC-AUC
-  (0.858), indicando que o sinal do dataset tem componente aproximadamente linearizável.
-  Sua calibração ruim (MAE 0.193) reflete a limitação do modelo linear ao capturar a
-  forma sigmoidal do decaimento.
-- **Ensemble soft voting** equilibra os modelos mas não domina nenhuma métrica
-  individualmente — comportamento esperado quando os modelos têm erros parcialmente
-  correlacionados. Sua vantagem principal é a **robustez**: ao combinar três vieses
-  indutivos distintos, reduz a probabilidade de falhas sistemáticas em regiões do
-  espaço de features não bem cobertas por nenhum modelo individual.
+- O tuning melhorou o ROC-AUC em CV, mas a calibração (Brier e CalMAE) piorou em
+  relação à configuração padrão — efeito esperado quando o critério de busca é
+  discriminabilidade (ROC-AUC), não calibração. Isso evidencia o **trade-off entre
+  discriminação e calibração**: modelos mais fortemente regularizados tendem a comprimir
+  as probabilidades em direção à média, reduzindo sua utilidade como estimativas
+  probabilísticas brutas.
+- A **Regressão Logística tunada** mantém a maior AP (0.5559) no conjunto de teste,
+  confirmando sua competitividade para datasets com sinal linearizável.
+- O **ensemble** equilibra os três vieses indutivos mas, neste caso, não supera
+  individualmente nenhum modelo em nenhuma métrica — situação comum quando os
+  erros dos modelos são parcialmente correlacionados (Dietterich, 2000).
 
-O **Gradient Boosting foi adotado como modelo final da API** por apresentar a melhor
-calibração — critério prioritário para uma aplicação que exibe probabilidades percentuais
-ao usuário. O ensemble foi descartado como opção final por não superar o GB individualmente
-em nenhuma das métricas de calibração.
+#### Etapa 4 — Limiar de Decisão Ótimo (curva Precisão-Recall)
+
+Para datasets desbalanceados, o limiar padrão de 0.5 é subótimo. A curva
+Precisão-Recall foi usada para encontrar o limiar que maximiza o F1-score
+para o modelo GB:
+
+| Limiar | F1 no conjunto de teste |
+|---|---|
+| 0.5 (padrão) | — |
+| **0.9316 (ótimo)** | **0.5905** |
+
+O limiar ótimo elevado (0.9316) reflete a extrema assimetria do problema: com apenas
+2.4% de positivos, o modelo precisa de alta confiança antes de predizer positivo para
+manter precisão aceitável. Na prática, o dashboard usa a probabilidade contínua (não
+o rótulo binário), tornando o limiar relevante apenas para classificações textuais.
 
 **Nota sobre interpretação do Average Precision:** Para datasets desbalanceados, o
 baseline de um classificador aleatório em AP é igual à prevalência de positivos
-(~2.4%, não 50%). O AP de 0.556 do GB representa, portanto, **23× o desempenho
+(~2.4%, não 50%). O AP de 0.5559 da LR representa, portanto, **~23× o desempenho
 aleatório** — o modelo consegue concentrar verdadeiros positivos no topo do ranking
 de probabilidade de forma muito superior ao acaso.
+
+**Modelo adotado na API:** Gradient Boosting tunado (`gradient_boosting_model.joblib`),
+por apresentar os melhores resultados de calibração entre os modelos tunados e ser
+o mais robusto (menor desvio-padrão em CV).
 
 ---
 
@@ -349,6 +400,9 @@ de probabilidade de forma muito superior ao acaso.
   Convention Proceedings*. American Association of Petroleum Geologists.
 
 **Aprendizado de Máquina**
+
+- Bergstra, J., & Bengio, Y. (2012). Random search for hyper-parameter optimization.
+  *Journal of Machine Learning Research*, 13(10), 281–305.
 
 - Breiman, L. (2001). Random forests. *Machine Learning*, 45(1), 5–32.
   https://doi.org/10.1023/A:1010933404324
