@@ -56,8 +56,19 @@ Onde `A` é a amplitude máxima e `λ` é a escala de decaimento espacial (em km
 
 | Feature   | Background real       | Amplitude da anomalia | Escala de decaimento |
 |-----------|-----------------------|-----------------------|----------------------|
-| CH₄ (ppm) | 1.9 ppm               | 0.35 ppm              | 35 km                |
-| Pressão (hPa) | 1013.0 hPa        | 4.0 hPa               | 45 km                |
+| CH₄ (ppm) | 1.9 ppm               | 0.35 ppm              | 80 km                |
+| Pressão (hPa) | 1013.0 hPa        | 4.0 hPa               | 100 km               |
+
+**Nota sobre recalibração das escalas de decaimento:** O modelo original (Campos/Santos)
+usava escalas de 35/45 km, calibradas para uma bounding box pequena e densa. Ao expandir
+para toda a costa brasileira (~10× de área), a distância média de um ponto amostrado até
+a âncora mais próxima passou de ~80 km para ~250–350 km. Com escala de 35 km, o sinal
+exponencial é virtualmente zero a > 150 km, colapsando a prevalência de positivos para
+< 1% e tornando o problema inaprendível (AUC ~0.76). As escalas foram aumentadas para
+80/100 km, representando **microsseepage difuso de bacia** (basin-scale leakage) em vez
+de seep pontual — distinção documentada em Saunders et al. (1999). O bias do logit foi
+ajustado de −5.5 para −4.5 para restaurar prevalência de ~2%. Ambas as mudanças são
+simplificações didáticas declaradas explicitamente.
 
 O nível de fundo de **1.9 ppm de CH₄** corresponde ao nível atmosférico global médio
 documentado pelo NOAA Global Monitoring Laboratory (Lan et al., 2024), tornando o sinal
@@ -108,19 +119,60 @@ didáticas** adotadas — e que devem ser declaradas explicitamente no relatóri
 
 ## Metodologia de Geração do Dataset (`src/generate_dataset.py`)
 
-1. **Âncoras de campo real**: coordenadas de 8 campos de petróleo nas bacias de Campos
-   e Santos (Tupi/Lula, Búzios, Sapinhoá, Marlim, Roncador, Barracuda, Jubarte,
-   Albacora) usadas como centros de sinal positivo.
-2. **Amostragem aleatória**: 12.000 pontos uniformes na bounding box
-   lat ∈ [−27.5°, −19.0°], lon ∈ [−45.5°, −37.5°]. Seed fixo (42) para
-   reprodutibilidade.
-3. **Cálculo de distância**: distância haversine (arco de grande círculo) até o campo
-   mais próximo.
-4. **Geração de features**: CH₄ e pressão com decaimento exponencial + ruído gaussiano.
-5. **Probabilidade geradora**: logit ponderado (CH₄ peso 7, pressão peso 3) com bias
+### Cobertura geográfica
+
+O dataset cobre toda a **margem continental brasileira**, de RS a AP:
+
+- **Bounding box**: lat ∈ [−34.0°, +5.5°], lon ∈ [−50.0°, −28.0°]
+- **30.000 amostras** (aumento de 12k para manter densidade com a área expandida)
+
+Esta expansão foi realizada para cobrir bacias do Nordeste, permitindo predições para
+qualquer ponto da costa brasileira — incluindo a **Baía de São Luís (MA)**, local de
+realização da OBSAT (~−2.53°S, −44.30°W).
+
+### Âncoras de campo/bacia
+
+16 âncoras distribuídas ao longo da costa brasileira, do SE ao NE:
+
+| Âncora | Bacia | Lat | Lon |
+|---|---|---|---|
+| Tupi/Lula | Santos (pré-sal) | −25.20 | −43.00 |
+| Búzios | Santos (pré-sal) | −25.30 | −43.50 |
+| Sapinhoá | Santos (pré-sal) | −25.00 | −43.30 |
+| Marlim | Campos | −22.50 | −40.30 |
+| Roncador | Campos | −22.05 | −40.10 |
+| Barracuda | Campos | −22.35 | −40.10 |
+| Albacora | Campos | −22.20 | −40.30 |
+| Jubarte | Espírito Santo | −20.60 | −39.80 |
+| Camarupim | Espírito Santo | −19.80 | −39.50 |
+| Camamu | Camamu-Almada (BA) | −13.80 | −38.80 |
+| Sergipe-Alagoas | Sergipe-Alagoas (SE/AL) | −10.50 | −36.50 |
+| Potiguar Offshore | Potiguar (RN) | −4.00 | −36.80 |
+| Potiguar Onshore | Potiguar (RN/CE) | −5.10 | −36.50 |
+| Ceará | Ceará (CE) | −3.20 | −38.50 |
+| Barreirinhas | Barreirinhas (MA/PI) | −2.50 | −42.50 |
+
+Coordenadas são centróides aproximados de campos produtores ou depocentros de bacia,
+usados para fins ilustrativos/educacionais — não para exploração real.
+
+### Pipeline de geração
+
+1. **Amostragem aleatória**: 30.000 pontos uniformes na bounding box. Seed fixo (42).
+2. **Cálculo de distância**: distância haversine até a âncora mais próxima.
+3. **Geração de features**: CH₄ e pressão com decaimento exponencial + ruído gaussiano.
+4. **Probabilidade geradora**: logit ponderado (CH₄ peso 7, pressão peso 3) com bias
    −5.5 e ruído σ=0.25 → sigmoid → `true_probability` (guardada apenas para avaliação).
-6. **Rótulo observável**: `label ~ Bernoulli(true_probability)` — prevalência de
+5. **Rótulo observável**: `label ~ Bernoulli(true_probability)` — prevalência de
    positivos ≈ 2.4%, refletindo que a maior parte do litoral não tem petróleo.
+
+### Comportamento esperado para São Luís (MA)
+
+A Baía de São Luís fica a ~160 km da âncora Barreirinhas. A essa distância, o sinal
+de microsseepage é atenuado (decaimento exponencial com λ=35 km para CH₄), portanto
+o modelo deve predizer **baixa probabilidade** — o que é cientificamente correto,
+já que São Luís não está sobre um campo confirmado, mas próximo a uma bacia em
+exploração. Isso demonstra que o sistema discrimina corretamente entre áreas de
+anomalia ativa e áreas adjacentes.
 
 ---
 
@@ -283,87 +335,82 @@ busca de hiperparâmetros, avaliação no conjunto de teste e ensemble.
 #### Etapa 1 — Validação Cruzada Baseline (5-fold estratificado, hiperparâmetros padrão)
 
 A validação cruzada estratificada em 5 folds (Stratified K-Fold) garante que
-cada fold preserve a proporção de positivos (~2.4%), fornecendo estimativas
+cada fold preserve a proporção de positivos (~3.3%), fornecendo estimativas
 de desempenho mais robustas e com quantificação de variância (±std).
+Dataset: 30.000 amostras, 24.000 treino / 6.000 teste, prevalência 3.28%.
 
 | Modelo | ROC-AUC (média ± std) | AP (média ± std) |
 |---|---|---|
-| Random Forest | 0.8868 ± 0.0230 | 0.5587 ± 0.0517 |
-| Gradient Boosting | 0.8856 ± 0.0190 | 0.5219 ± 0.0509 |
-| Logistic Regression | **0.9061 ± 0.0306** | **0.5724 ± 0.0628** |
+| Random Forest | 0.7740 ± 0.0336 | 0.4491 ± 0.0576 |
+| Gradient Boosting | 0.7731 ± 0.0309 | 0.4413 ± 0.0582 |
+| Logistic Regression | **0.7862 ± 0.0382** | **0.4627 ± 0.0627** |
 
-Observação notável: a Regressão Logística apresentou o maior ROC-AUC médio em
-validação cruzada — indicando que as relações entre features e rótulo têm
-componente linearizável suficientemente forte no espaço transformado pelo
-StandardScaler. O GB apresenta menor desvio-padrão (0.019), sugerindo maior
-estabilidade entre folds.
+A Regressão Logística lidera novamente em CV, confirmando componente linearizável
+no sinal. O GB apresenta menor desvio-padrão (0.031), indicando maior estabilidade.
+A redução de ~0.88 para ~0.78 em relação ao modelo Campos/Santos é esperada: o
+problema é genuinamente mais difícil com 10× mais área e sinal mais difuso.
 
 #### Etapa 2 — Busca de Hiperparâmetros (RandomizedSearchCV)
 
-`RandomizedSearchCV` com 30 iterações e 5-fold CV, otimizando ROC-AUC.
-A busca amostrou aleatoriamente combinações dos espaços de parâmetros definidos
-para cada modelo, reduzindo o custo computacional em relação ao GridSearchCV
-sem sacrificar qualidade (Bergstra & Bengio, 2012).
+`RandomizedSearchCV` com 30 iterações e 5-fold CV, otimizando ROC-AUC
+(Bergstra & Bengio, 2012).
 
 | Modelo | Melhor CV ROC-AUC | Melhores hiperparâmetros |
 |---|---|---|
-| Random Forest | 0.9062 | max_depth=4, min_samples_leaf=10, max_features='log2', n_estimators=300 |
-| Gradient Boosting | 0.8982 | max_depth=4, learning_rate=0.01, min_samples_leaf=5, l2_reg=1.0, max_iter=300 |
-| Logistic Regression | **0.9065** | C=0.01 |
+| Random Forest | 0.7899 | max_depth=4, min_samples_leaf=5, max_features='sqrt', n_estimators=200 |
+| Gradient Boosting | 0.7897 | max_depth=3, learning_rate=0.2, min_samples_leaf=10, max_iter=500 |
+| Logistic Regression | 0.7863 | C=0.1 |
 
-Os melhores hiperparâmetros encontrados são consistentemente mais **regularizados**
-do que os padrões (RF com max_depth=4 vs. 8; GB com learning_rate=0.01 vs. 0.05;
-LR com C=0.01 vs. 1.0), refletindo que o espaço de busca favoreceu modelos com
-menor variância para este dataset de tamanho moderado (9.600 amostras de treino).
+Os três modelos convergem para valores de ROC-AUC próximos após tuning (~0.789),
+evidenciando que o ganho marginal do tuning foi moderado — o gargalo está na
+dificuldade intrínseca do problema (sinal difuso em grande escala geográfica),
+não nos hiperparâmetros.
 
 #### Etapa 3 — Avaliação no Conjunto de Teste (modelos tunados)
 
 | Modelo | ROC-AUC ↑ | Avg Precision ↑ | Brier Score ↓ | Calibration MAE ↓ |
 |---|---|---|---|---|
-| Random Forest (tunado) | **0.8604** | 0.5147 | 0.0578 | 0.1663 |
-| Gradient Boosting (tunado) | 0.8556 | 0.4998 | **0.0568** | 0.1673 |
-| Logistic Regression (tunada) | 0.8580 | **0.5559** | 0.0741 | 0.1971 |
-| **Ensemble soft voting** | 0.8546 | 0.5386 | 0.0604 | 0.1769 |
+| Random Forest (tunado) | 0.7832 | 0.4166 | 0.1204 | 0.3013 |
+| Gradient Boosting (tunado) | 0.7923 | 0.4110 | **0.1140** | **0.2781** |
+| Logistic Regression (tunada) | 0.7833 | 0.4152 | 0.1408 | 0.3191 |
+| **Ensemble soft voting** | **0.7930** | **0.4211** | 0.1215 | 0.2995 |
 
 **Observações:**
 
-- O tuning melhorou o ROC-AUC em CV, mas a calibração (Brier e CalMAE) piorou em
-  relação à configuração padrão — efeito esperado quando o critério de busca é
-  discriminabilidade (ROC-AUC), não calibração. Isso evidencia o **trade-off entre
-  discriminação e calibração**: modelos mais fortemente regularizados tendem a comprimir
-  as probabilidades em direção à média, reduzindo sua utilidade como estimativas
-  probabilísticas brutas.
-- A **Regressão Logística tunada** mantém a maior AP (0.5559) no conjunto de teste,
-  confirmando sua competitividade para datasets com sinal linearizável.
-- O **ensemble** equilibra os três vieses indutivos mas, neste caso, não supera
-  individualmente nenhum modelo em nenhuma métrica — situação comum quando os
-  erros dos modelos são parcialmente correlacionados (Dietterich, 2000).
+- O **ensemble** superou todos os modelos individuais em ROC-AUC (0.7930) e AP
+  (0.4211) — diferente do resultado anterior, onde os modelos eram mais correlacionados.
+  Com o dataset expandido e mais diverso, os três modelos erram em regiões diferentes
+  do espaço geográfico, tornando a combinação mais eficaz (Dietterich, 2000).
+- O **Gradient Boosting** continua com a melhor calibração (Brier 0.114, CalMAE 0.278),
+  mantendo o trade-off discriminação vs. calibração observado anteriormente.
+- A redução de ROC-AUC (0.87 → 0.79) é explicável e defensável: o modelo agora cobre
+  toda a costa brasileira com sinal mais difuso (escalas 80/100 km vs. 35/45 km) — um
+  problema genuinamente mais difícil, não uma falha de modelagem.
 
 #### Etapa 4 — Limiar de Decisão Ótimo (curva Precisão-Recall)
 
 Para datasets desbalanceados, o limiar padrão de 0.5 é subótimo. A curva
-Precisão-Recall foi usada para encontrar o limiar que maximiza o F1-score
-para o modelo GB:
+Precisão-Recall foi usada para encontrar o limiar que maximiza F1 para o GB:
 
 | Limiar | F1 no conjunto de teste |
 |---|---|
 | 0.5 (padrão) | — |
-| **0.9316 (ótimo)** | **0.5905** |
+| **0.8986 (ótimo)** | **0.4971** |
 
-O limiar ótimo elevado (0.9316) reflete a extrema assimetria do problema: com apenas
-2.4% de positivos, o modelo precisa de alta confiança antes de predizer positivo para
-manter precisão aceitável. Na prática, o dashboard usa a probabilidade contínua (não
-o rótulo binário), tornando o limiar relevante apenas para classificações textuais.
+O limiar elevado (0.899) reflete que, com ~3.3% de positivos, o modelo precisa de
+alta confiança para predizer positivo e manter precisão aceitável. O dashboard usa
+a probabilidade contínua, tornando o limiar relevante apenas para as classificações
+textuais (low / moderate / high).
 
 **Nota sobre interpretação do Average Precision:** Para datasets desbalanceados, o
 baseline de um classificador aleatório em AP é igual à prevalência de positivos
-(~2.4%, não 50%). O AP de 0.5559 da LR representa, portanto, **~23× o desempenho
-aleatório** — o modelo consegue concentrar verdadeiros positivos no topo do ranking
-de probabilidade de forma muito superior ao acaso.
+(~3.3%, não 50%). O AP de 0.4211 do ensemble representa, portanto, **~13× o desempenho
+aleatório** — o modelo concentra verdadeiros positivos no topo do ranking de forma
+muito superior ao acaso.
 
 **Modelo adotado na API:** Gradient Boosting tunado (`gradient_boosting_model.joblib`),
-por apresentar os melhores resultados de calibração entre os modelos tunados e ser
-o mais robusto (menor desvio-padrão em CV).
+por apresentar a melhor calibração (Brier 0.114, CalMAE 0.278) — critério prioritário
+para uma aplicação que exibe probabilidades percentuais ao usuário.
 
 ---
 

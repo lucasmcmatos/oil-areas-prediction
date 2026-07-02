@@ -47,8 +47,8 @@ app.add_middleware(
 
 
 class PredictionInput(BaseModel):
-    latitude: float = Field(..., ge=-27.5, le=-19.0)
-    longitude: float = Field(..., ge=-45.5, le=-37.5)
+    latitude: float = Field(..., ge=-34.0, le=5.5)
+    longitude: float = Field(..., ge=-50.0, le=-28.0)
     methane_ppm: float = Field(..., gt=0)
     pressure_hpa: float = Field(..., gt=0)
 
