@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-MODEL_PATH = PROJECT_ROOT / "models" / "oil_probability_model.joblib"
+MODEL_PATH = PROJECT_ROOT / "models" / "gradient_boosting_model.joblib"
 DASHBOARD_DIR = PROJECT_ROOT / "dashboard"
 
 HIGH_PROBABILITY_THRESHOLD = 70.0

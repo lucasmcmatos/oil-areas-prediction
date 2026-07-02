@@ -303,8 +303,16 @@ Todos os modelos avaliados no mesmo conjunto de teste (2.400 amostras, 2.42% pos
   indutivos distintos, reduz a probabilidade de falhas sistemáticas em regiões do
   espaço de features não bem cobertas por nenhum modelo individual.
 
-O ensemble foi adotado como **modelo final da API** por sua robustez, mesmo que o GB
-individualmente apresente melhor calibração pontual.
+O **Gradient Boosting foi adotado como modelo final da API** por apresentar a melhor
+calibração — critério prioritário para uma aplicação que exibe probabilidades percentuais
+ao usuário. O ensemble foi descartado como opção final por não superar o GB individualmente
+em nenhuma das métricas de calibração.
+
+**Nota sobre interpretação do Average Precision:** Para datasets desbalanceados, o
+baseline de um classificador aleatório em AP é igual à prevalência de positivos
+(~2.4%, não 50%). O AP de 0.556 do GB representa, portanto, **23× o desempenho
+aleatório** — o modelo consegue concentrar verdadeiros positivos no topo do ranking
+de probabilidade de forma muito superior ao acaso.
 
 ---
 
