@@ -17,6 +17,8 @@
     --red: #ff5a5a;
     --text: #d7dee6;
     --text-dim: #7c8a9a;
+    --manual: #3adbc1;
+    --satellite: #c084fc;
   }
 
   * { box-sizing: border-box; }
@@ -39,16 +41,16 @@
   #map { flex: 1; height: 100%; background: var(--bg); }
 
   #panel {
-    width: 340px;
+    width: 320px;
     flex-shrink: 0;
-    padding: 20px;
+    padding: 14px 16px;
     background: var(--panel);
     border-left: 1px solid var(--border);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 10px;
   }
 
   /* Phones / narrow viewports: stack map above a scrollable control panel
@@ -75,8 +77,8 @@
     }
 
     button {
-      padding: 14px;
-      font-size: 0.95rem;
+      padding: 12px;
+      font-size: 0.9rem;
     }
 
     input[type="range"] {
@@ -84,15 +86,15 @@
     }
 
     input[type="number"] {
-      padding: 10px 8px;
-      font-size: 0.9rem;
+      padding: 8px 6px;
+      font-size: 0.85rem;
     }
   }
 
   h1 {
     font-family: 'Space Grotesk', sans-serif;
     font-size: 1.15rem;
-    margin: 0;
+    margin: 0 0 3px;
     color: var(--amber);
     letter-spacing: 0.02em;
   }
@@ -103,24 +105,35 @@
     font-family: 'IBM Plex Mono', monospace;
     font-size: 0.7rem;
     color: var(--text-dim);
-    margin-top: -12px;
+    margin-top: 0;
+  }
+
+  .header-block {
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
   }
 
   .field {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 3px;
   }
 
   .field label {
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     color: var(--text-dim);
     display: flex;
     justify-content: space-between;
   }
 
   .field label .value { color: var(--teal); }
+
+  .coords-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
 
   input[type="range"] {
     accent-color: var(--amber);
@@ -131,18 +144,18 @@
     background: var(--bg);
     border: 1px solid var(--border);
     color: var(--text);
-    padding: 6px 8px;
+    padding: 4px 6px;
     border-radius: 4px;
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     width: 100%;
   }
 
   button {
     font-family: 'Space Grotesk', sans-serif;
     font-weight: 700;
-    font-size: 0.85rem;
-    padding: 10px 14px;
+    font-size: 0.82rem;
+    padding: 7px 12px;
     border-radius: 6px;
     border: 1px solid var(--border);
     background: transparent;
@@ -217,6 +230,15 @@
     font-size: 0.68rem;
     color: var(--text-dim);
     display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 10px 12px;
+    background: var(--bg);
+  }
+  .sat-status-row {
+    display: flex;
     align-items: center;
     gap: 7px;
   }
@@ -225,7 +247,81 @@
     background: var(--text-dim);
     transition: background 0.3s;
   }
-  .sat-dot.connected { background: var(--teal); }
+  .sat-dot.connected { background: var(--satellite); }
+  .sat-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 0;
+  }
+
+  #history-box {
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .history-header {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.64rem;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  #history-list {
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .history-item {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    cursor: default;
+  }
+  .history-item:last-child { border-bottom: none; }
+
+  .history-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .history-source {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.61rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    flex-shrink: 0;
+  }
+
+  .history-prob {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.68rem;
+    font-weight: 600;
+  }
+
+  .history-coords {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.62rem;
+    color: var(--text-dim);
+    margin-top: 1px;
+  }
+
+  .history-empty {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.66rem;
+    color: var(--text-dim);
+    padding: 12px 10px;
+    text-align: center;
+  }
 </style>
 </head>
 <body>
@@ -233,7 +329,7 @@
 <div id="map"></div>
 
 <div id="panel">
-  <div>
+  <div class="header-block">
     <h1>OIL<span>SAT</span> // TELEMETRY</h1>
     <div class="subtitle">COSTA BRASILEIRA — LEVANTAMENTO DE METANO/PRESSÃO</div>
   </div>
@@ -248,39 +344,50 @@
     <input type="range" id="pressure" min="1010" max="1020" step="0.1" value="1013.0" />
   </div>
 
-  <div class="field">
-    <label>LATITUDE</label>
-    <input type="number" id="latitude" step="0.0001" value="-25.20" />
-  </div>
-
-  <div class="field">
-    <label>LONGITUDE</label>
-    <input type="number" id="longitude" step="0.0001" value="-43.00" />
+  <div class="coords-row">
+    <div class="field">
+      <label>LATITUDE</label>
+      <input type="number" id="latitude" step="0.0001" value="-25.20" />
+    </div>
+    <div class="field">
+      <label>LONGITUDE</label>
+      <input type="number" id="longitude" step="0.0001" value="-43.00" />
+    </div>
   </div>
 
   <div class="subtitle">Clique no mapa para definir latitude/longitude.</div>
 
   <button class="primary" id="analyze-btn">ANALISAR PONTO</button>
-  <button class="secondary" id="scan-btn">VARRER ÁREA VISÍVEL</button>
   <button id="clear-btn">LIMPAR MARCADORES</button>
 
   <div id="result">Aguardando leitura&hellip;</div>
 
-  <hr />
+  <div id="history-box">
+    <div class="history-header">HISTÓRICO DE LEITURAS</div>
+    <div id="history-list">
+      <div id="history-empty" class="history-empty">Nenhuma leitura ainda.</div>
+    </div>
+  </div>
 
   <div class="sat-status">
-    <span id="sat-dot" class="sat-dot"></span>
-    <span id="sat-label">SATÉLITE: AGUARDANDO</span>
-  </div>
+    <div class="sat-status-row">
+      <span id="sat-dot" class="sat-dot"></span>
+      <span id="sat-label">SATÉLITE: AGUARDANDO</span>
+    </div>
 
-  <div class="legend">
-    <div class="row"><span class="dot low"></span> &lt; 30% — baixo</div>
-    <div class="row"><span class="dot moderate"></span> 30–70% — moderado</div>
-    <div class="row"><span class="dot high"></span> &gt; 70% — alto</div>
-    <div class="row"><span class="dot anchor"></span> campo conhecido (referência)</div>
-  </div>
+    <hr class="sat-divider" />
 
-  <div id="api-url">API: <span id="api-url-text"></span></div>
+    <div class="legend">
+      <div class="row"><span class="dot low"></span> &lt; 30% — baixo</div>
+      <div class="row"><span class="dot moderate"></span> 30–70% — moderado</div>
+      <div class="row"><span class="dot high"></span> &gt; 70% — alto</div>
+      <div class="row"><span class="dot anchor"></span> campo conhecido (referência)</div>
+    </div>
+
+    <hr class="sat-divider" />
+
+    <div id="api-url">API: <span id="api-url-text"></span></div>
+  </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -289,6 +396,9 @@
   // LAN IP for a phone on the same network, or a future public deployment).
   const API_BASE = window.location.origin;
   document.getElementById('api-url-text').textContent = API_BASE;
+
+  const SOURCE_COLOR = { 'Manual': '#3adbc1', 'Satélite': '#c084fc' };
+  const sourceColor = (source) => SOURCE_COLOR[source] ?? '#7c8a9a';
 
   const OIL_FIELD_ANCHORS = {
     'Tupi/Lula':           [-25.20, -43.00],
@@ -341,7 +451,6 @@
   });
 
   const readingMarkers = [];
-  const scanMarkers = [];
   const satelliteMarkers = [];
   let pendingMarker = null;
 
@@ -379,7 +488,7 @@
       <div style="background:#10151d;border:1px solid ${color};border-radius:5px;
                   padding:8px 11px;font-family:'IBM Plex Mono',monospace;
                   font-size:0.72rem;line-height:1.85;color:#d7dee6;min-width:200px;">
-        <div style="color:#ff9f1c;font-size:0.67rem;font-weight:600;
+        <div style="color:${sourceColor(source)};font-size:0.67rem;font-weight:600;
                     letter-spacing:0.09em;border-bottom:1px solid #1e2733;
                     margin-bottom:5px;padding-bottom:4px;">
           ◈ ${source.toUpperCase()}
@@ -404,6 +513,23 @@
   function setResult(text, classification) {
     resultBox.textContent = text;
     resultBox.className = classification || '';
+  }
+
+  function addToHistory(fields, source) {
+    const list = document.getElementById('history-list');
+    const empty = document.getElementById('history-empty');
+    if (empty) empty.remove();
+
+    const color = colorForClassification(fields.classification);
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    item.innerHTML = `
+      <div class="history-row">
+        <span class="history-source" style="color:${sourceColor(source)};">◈ ${source.toUpperCase()}</span>
+        <span class="history-prob" style="color:${color};">${fields.oil_probability_percent}% — ${classificationPt(fields.classification)}</span>
+      </div>
+      <div class="history-coords">${fields.latitude.toFixed(4)}° / ${fields.longitude.toFixed(4)}°</div>`;
+    list.insertBefore(item, list.firstChild);
   }
 
   async function analyzePoint() {
@@ -431,11 +557,13 @@
       const color = colorForClassification(data.classification);
       const marker = L.circleMarker([payload.latitude, payload.longitude], {
         radius: 9,
-        color: color,
+        color: sourceColor('Manual'),
         fillColor: color,
         fillOpacity: 0.85,
+        weight: 2,
       }).bindTooltip(buildTooltipHtml(fields, 'Manual'), { sticky: false }).addTo(map);
       readingMarkers.push(marker);
+      addToHistory(fields, 'Manual');
 
       setResult(
         `PROB. DE PETRÓLEO: ${data.oil_probability_percent}%\nCLASSE: ${classificationPt(data.classification)}\nLAT ${payload.latitude.toFixed(4)}  LON ${payload.longitude.toFixed(4)}`,
@@ -446,81 +574,31 @@
     }
   }
 
-  async function scanVisibleArea() {
-    const bounds = map.getBounds();
-    const gridSize = 12;
-    const points = [];
-    for (let i = 0; i < gridSize; i++) {
-      for (let j = 0; j < gridSize; j++) {
-        const lat = bounds.getSouth() + (bounds.getNorth() - bounds.getSouth()) * (i / (gridSize - 1));
-        const lon = bounds.getWest() + (bounds.getEast() - bounds.getWest()) * (j / (gridSize - 1));
-        points.push({
-          latitude: lat,
-          longitude: lon,
-          methane_ppm: parseFloat(methaneInput.value),
-          pressure_hpa: parseFloat(pressureInput.value),
-        });
-      }
-    }
-
-    setResult(`Varrendo ${points.length} pontos...`, '');
-
-    try {
-      const response = await fetch(`${API_BASE}/predict/batch`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(points),
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const results = await response.json();
-
-      scanMarkers.forEach((marker) => map.removeLayer(marker));
-      scanMarkers.length = 0;
-
-      results.forEach((result, index) => {
-        const point = points[index];
-        const marker = L.circleMarker([point.latitude, point.longitude], {
-          radius: 5,
-          color: colorForClassification(result.classification),
-          fillColor: colorForClassification(result.classification),
-          fillOpacity: 0.6,
-          weight: 1,
-        }).bindTooltip(`${result.oil_probability_percent}%`);
-        marker.addTo(map);
-        scanMarkers.push(marker);
-      });
-
-      setResult(`Varredura concluída: ${points.length} pontos marcados.`, '');
-    } catch (error) {
-      setResult(`ERRO: ${error.message}\nA API está rodando em ${API_BASE}?`, '');
-    }
-  }
-
   function plotSatelliteMarker(data) {
     const color = colorForClassification(data.classification);
     const marker = L.circleMarker([data.latitude, data.longitude], {
       radius: 10,
-      color: color,
+      color: sourceColor('Satélite'),
       fillColor: color,
       fillOpacity: 0.75,
       weight: 3,
     }).bindTooltip(buildTooltipHtml(data, 'Satélite'), { sticky: false }).addTo(map);
     satelliteMarkers.push(marker);
+    addToHistory(data, 'Satélite');
   }
 
   function clearMarkers() {
     if (pendingMarker) { map.removeLayer(pendingMarker); pendingMarker = null; }
     readingMarkers.forEach((m) => map.removeLayer(m));
     readingMarkers.length = 0;
-    scanMarkers.forEach((m) => map.removeLayer(m));
-    scanMarkers.length = 0;
     satelliteMarkers.forEach((m) => map.removeLayer(m));
     satelliteMarkers.length = 0;
     setResult('Aguardando leitura...', '');
+    document.getElementById('history-list').innerHTML =
+      '<div id="history-empty" class="history-empty">Nenhuma leitura ainda.</div>';
   }
 
   document.getElementById('analyze-btn').addEventListener('click', analyzePoint);
-  document.getElementById('scan-btn').addEventListener('click', scanVisibleArea);
   document.getElementById('clear-btn').addEventListener('click', clearMarkers);
 
   // Real-time satellite feed via Server-Sent Events.

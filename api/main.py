@@ -97,12 +97,6 @@ def predict(point: PredictionInput) -> PredictionOutput:
     return predict_one(point)
 
 
-@app.post("/predict/batch", response_model=list[PredictionOutput])
-def predict_batch(points: list[PredictionInput]) -> list[PredictionOutput]:
-    if model is None:
-        raise HTTPException(status_code=503, detail="Model not loaded")
-    return [predict_one(point) for point in points]
-
 
 @app.post("/satellite")
 async def satellite_reading(point: PredictionInput) -> dict:
