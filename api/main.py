@@ -10,12 +10,15 @@ important for field use alongside the satellite payload.
 
 from __future__ import annotations
 
+import asyncio
+import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import joblib
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -27,6 +30,13 @@ HIGH_PROBABILITY_THRESHOLD = 70.0
 MODERATE_PROBABILITY_THRESHOLD = 30.0
 
 model = None
+
+# In-memory pub/sub for satellite SSE stream.
+# Each connected browser tab gets its own asyncio.Queue; the POST /satellite
+# endpoint puts the event into every queue so all tabs update simultaneously.
+_satellite_subscribers: list[asyncio.Queue] = []
+_satellite_history: list[dict] = []
+_MAX_SATELLITE_HISTORY = 200
 
 
 @asynccontextmanager
@@ -92,6 +102,56 @@ def predict_batch(points: list[PredictionInput]) -> list[PredictionOutput]:
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
     return [predict_one(point) for point in points]
+
+
+@app.post("/satellite")
+async def satellite_reading(point: PredictionInput) -> dict:
+    """Receive a satellite telemetry payload, run prediction, push to all SSE subscribers."""
+    if model is None:
+        raise HTTPException(status_code=503, detail="Model not loaded")
+    result = predict_one(point)
+    event: dict = {
+        "latitude": point.latitude,
+        "longitude": point.longitude,
+        "methane_ppm": point.methane_ppm,
+        "pressure_hpa": point.pressure_hpa,
+        "oil_probability_percent": result.oil_probability_percent,
+        "classification": result.classification,
+    }
+    _satellite_history.append(event)
+    if len(_satellite_history) > _MAX_SATELLITE_HISTORY:
+        _satellite_history.pop(0)
+    for queue in list(_satellite_subscribers):
+        await queue.put(event)
+    return event
+
+
+@app.get("/satellite/stream")
+async def satellite_stream() -> StreamingResponse:
+    """SSE endpoint. Each browser tab that opens this gets its own queue.
+    On connect, the full history is replayed so a late-joining tab sees
+    all readings from the current server session."""
+    queue: asyncio.Queue = asyncio.Queue()
+    _satellite_subscribers.append(queue)
+
+    async def generate():
+        try:
+            for item in list(_satellite_history):
+                yield f"data: {json.dumps(item)}\n\n"
+            while True:
+                data = await queue.get()
+                yield f"data: {json.dumps(data)}\n\n"
+        finally:
+            try:
+                _satellite_subscribers.remove(queue)
+            except ValueError:
+                pass
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # Mounted last so it only catches paths not matched by the routes above

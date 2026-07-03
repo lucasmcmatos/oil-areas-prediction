@@ -466,6 +466,120 @@ melhor em ROC-AUC, AP e calibração simultaneamente nesta versão.
 
 ---
 
+## Arquitetura do Sistema
+
+### Visão geral
+
+O sistema é composto por três camadas:
+
+```
+Satélite / CubeSat
+       │  POST /satellite
+       ▼
+┌──────────────────────────────────┐
+│        API  (FastAPI)            │
+│  GET  /health                    │
+│  POST /predict                   │  ← consulta manual (dashboard)
+│  POST /predict/batch             │  ← varredura de grade (dashboard)
+│  POST /satellite                 │  ← payload do satélite
+│  GET  /satellite/stream  (SSE)   │  ← stream para o browser
+│  GET  /  (dashboard estático)    │
+└──────────────────────────────────┘
+       │  SSE + REST
+       ▼
+┌──────────────────────────────────┐
+│      Dashboard  (Leaflet.js)     │
+│  Análise manual de pontos        │
+│  Varredura de área visível       │
+│  Feed em tempo real do satélite  │
+└──────────────────────────────────┘
+```
+
+Um único processo (`uvicorn`) serve a API e o dashboard. Isso permite que um celular
+na mesma rede Wi-Fi acesse tudo por uma única URL, sem servidor HTTP separado.
+
+### Como executar
+
+```bash
+uv run uvicorn api.main:app --host 0.0.0.0 --port 8000
+```
+
+- **No próprio computador:** `http://127.0.0.1:8000/`
+- **No celular (mesma rede Wi-Fi):** descobrir o IP local (`hostname -I`) e acessar
+  `http://<esse-ip>:8000/`
+
+Para re-treinar o modelo (opcional):
+
+```bash
+uv run python src/generate_dataset.py   # gera data/synthetic_dataset.csv
+uv run python src/train_model.py        # treina e salva em models/
+```
+
+### Descrição dos endpoints
+
+| Endpoint | Método | Descrição |
+|---|---|---|
+| `/health` | GET | Status da API e confirmação de que o modelo está carregado |
+| `/predict` | POST | Predição para um ponto (lat, lon, CH₄, pressão) |
+| `/predict/batch` | POST | Predição para uma lista de pontos (varredura de grade) |
+| `/satellite` | POST | Recebe payload do satélite, roda predição e transmite via SSE |
+| `/satellite/stream` | GET | Conexão SSE — browser se inscreve aqui para receber leituras em tempo real |
+
+**Schema de entrada** (compartilhado por `/predict` e `/satellite`):
+
+```json
+{
+  "latitude":     -2.55,
+  "longitude":    -44.20,
+  "methane_ppm":  2.05,
+  "pressure_hpa": 1014.2
+}
+```
+
+**Schema de saída** (`/predict` e `/satellite`):
+
+```json
+{
+  "oil_probability_percent": 34.71,
+  "classification": "moderate"
+}
+```
+
+`/satellite` retorna adicionalmente os campos de entrada (echo), para que o browser
+possa plotar o marcador sem precisar de uma segunda requisição.
+
+### Feed em tempo real do satélite (SSE)
+
+O fluxo de dados em tempo real funciona com **Server-Sent Events (SSE)**:
+
+1. O browser abre uma conexão persistente com `GET /satellite/stream`.
+2. O satélite (ou qualquer cliente externo) envia `POST /satellite` com o payload.
+3. A API roda a predição, salva no histórico em memória (últimos 200 eventos) e
+   distribui o evento para **todas** as conexões SSE abertas simultaneamente.
+4. Cada browser recebe o evento JSON e plota imediatamente um marcador no mapa com
+   tooltip mostrando todos os dados de entrada e a probabilidade predita.
+
+Ao abrir o dashboard, o histórico da sessão corrente é enviado automaticamente —
+um tab aberto depois do satélite já ter enviado leituras ainda verá todos os pontos.
+
+**Exemplo de envio de payload pelo satélite (curl):**
+
+```bash
+curl -X POST http://127.0.0.1:8000/satellite \
+  -H "Content-Type: application/json" \
+  -d '{"latitude": -2.55, "longitude": -44.20, "methane_ppm": 2.05, "pressure_hpa": 1014.2}'
+```
+
+O dashboard exibe um indicador de status no painel lateral:
+- `● SATÉLITE: CONECTADO` (verde/teal) quando a conexão SSE está ativa
+- `● SATÉLITE: AGUARDANDO` (cinza) quando desconectado (o browser reconecta automaticamente)
+
+Marcadores gerados por leitura de satélite são visualmente distinguíveis dos
+marcadores manuais (borda mais espessa, `weight: 3`) e o tooltip indica a fonte
+como `◈ SATÉLITE` em vez de `◈ MANUAL`.
+
+---
+
 ## Referências
 
 - Hornafius, J. S., Quigley, D. C., & Luyendyk, B. P. (1999). The world's most

@@ -211,6 +211,21 @@
     padding: 0 !important;
   }
   .leaflet-tooltip::before { display: none !important; }
+
+  .sat-status {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .sat-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    background: var(--text-dim);
+    transition: background 0.3s;
+  }
+  .sat-dot.connected { background: var(--teal); }
 </style>
 </head>
 <body>
@@ -252,6 +267,11 @@
   <div id="result">Aguardando leitura&hellip;</div>
 
   <hr />
+
+  <div class="sat-status">
+    <span id="sat-dot" class="sat-dot"></span>
+    <span id="sat-label">SATÉLITE: AGUARDANDO</span>
+  </div>
 
   <div class="legend">
     <div class="row"><span class="dot low"></span> &lt; 30% — baixo</div>
@@ -322,6 +342,7 @@
 
   const readingMarkers = [];
   const scanMarkers = [];
+  const satelliteMarkers = [];
   let pendingMarker = null;
 
   map.on('click', (event) => {
@@ -350,6 +371,36 @@
     return 'BAIXO';
   }
 
+  // Builds the rich HTML tooltip shared by manual and satellite markers.
+  // fields: {latitude, longitude, methane_ppm, pressure_hpa, oil_probability_percent, classification}
+  function buildTooltipHtml(fields, source) {
+    const color = colorForClassification(fields.classification);
+    return `
+      <div style="background:#10151d;border:1px solid ${color};border-radius:5px;
+                  padding:8px 11px;font-family:'IBM Plex Mono',monospace;
+                  font-size:0.72rem;line-height:1.85;color:#d7dee6;min-width:200px;">
+        <div style="color:#ff9f1c;font-size:0.67rem;font-weight:600;
+                    letter-spacing:0.09em;border-bottom:1px solid #1e2733;
+                    margin-bottom:5px;padding-bottom:4px;">
+          ◈ ${source.toUpperCase()}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:1px 10px;">
+          <span style="color:#7c8a9a;">Metano (CH&#8324;)</span>
+          <span>${fields.methane_ppm.toFixed(3)} ppm</span>
+          <span style="color:#7c8a9a;">Press&atilde;o</span>
+          <span>${fields.pressure_hpa.toFixed(1)} hPa</span>
+          <span style="color:#7c8a9a;">Latitude</span>
+          <span>${fields.latitude.toFixed(4)}&deg;</span>
+          <span style="color:#7c8a9a;">Longitude</span>
+          <span>${fields.longitude.toFixed(4)}&deg;</span>
+        </div>
+        <div style="border-top:1px solid #1e2733;margin-top:6px;padding-top:5px;
+                    color:${color};font-size:0.85rem;font-weight:700;letter-spacing:0.03em;">
+          ${fields.oil_probability_percent}% &mdash; ${classificationPt(fields.classification)}
+        </div>
+      </div>`;
+  }
+
   function setResult(text, classification) {
     resultBox.textContent = text;
     resultBox.className = classification || '';
@@ -376,39 +427,14 @@
 
       if (pendingMarker) { map.removeLayer(pendingMarker); pendingMarker = null; }
 
+      const fields = { ...payload, ...data };
       const color = colorForClassification(data.classification);
-      const source = 'Manual';
-      const tooltipHtml = `
-        <div style="background:#10151d;border:1px solid ${color};border-radius:5px;
-                    padding:8px 11px;font-family:'IBM Plex Mono',monospace;
-                    font-size:0.72rem;line-height:1.85;color:#d7dee6;min-width:200px;">
-          <div style="color:#ff9f1c;font-size:0.67rem;font-weight:600;
-                      letter-spacing:0.09em;border-bottom:1px solid #1e2733;
-                      margin-bottom:5px;padding-bottom:4px;">
-            ◈ ${source.toUpperCase()}
-          </div>
-          <div style="display:grid;grid-template-columns:1fr auto;gap:1px 10px;">
-            <span style="color:#7c8a9a;">Metano (CH&#8324;)</span>
-            <span>${payload.methane_ppm.toFixed(3)} ppm</span>
-            <span style="color:#7c8a9a;">Press&atilde;o</span>
-            <span>${payload.pressure_hpa.toFixed(1)} hPa</span>
-            <span style="color:#7c8a9a;">Latitude</span>
-            <span>${payload.latitude.toFixed(4)}&deg;</span>
-            <span style="color:#7c8a9a;">Longitude</span>
-            <span>${payload.longitude.toFixed(4)}&deg;</span>
-          </div>
-          <div style="border-top:1px solid #1e2733;margin-top:6px;padding-top:5px;
-                      color:${color};font-size:0.85rem;font-weight:700;letter-spacing:0.03em;">
-            ${data.oil_probability_percent}% &mdash; ${classificationPt(data.classification)}
-          </div>
-        </div>`;
-
       const marker = L.circleMarker([payload.latitude, payload.longitude], {
         radius: 9,
         color: color,
         fillColor: color,
         fillOpacity: 0.85,
-      }).bindTooltip(tooltipHtml, { sticky: false }).addTo(map);
+      }).bindTooltip(buildTooltipHtml(fields, 'Manual'), { sticky: false }).addTo(map);
       readingMarkers.push(marker);
 
       setResult(
@@ -470,18 +496,54 @@
     }
   }
 
+  function plotSatelliteMarker(data) {
+    const color = colorForClassification(data.classification);
+    const marker = L.circleMarker([data.latitude, data.longitude], {
+      radius: 10,
+      color: color,
+      fillColor: color,
+      fillOpacity: 0.75,
+      weight: 3,
+    }).bindTooltip(buildTooltipHtml(data, 'Satélite'), { sticky: false }).addTo(map);
+    satelliteMarkers.push(marker);
+  }
+
   function clearMarkers() {
     if (pendingMarker) { map.removeLayer(pendingMarker); pendingMarker = null; }
     readingMarkers.forEach((m) => map.removeLayer(m));
     readingMarkers.length = 0;
     scanMarkers.forEach((m) => map.removeLayer(m));
     scanMarkers.length = 0;
+    satelliteMarkers.forEach((m) => map.removeLayer(m));
+    satelliteMarkers.length = 0;
     setResult('Aguardando leitura...', '');
   }
 
   document.getElementById('analyze-btn').addEventListener('click', analyzePoint);
   document.getElementById('scan-btn').addEventListener('click', scanVisibleArea);
   document.getElementById('clear-btn').addEventListener('click', clearMarkers);
+
+  // Real-time satellite feed via Server-Sent Events.
+  // The browser keeps this connection open; each POST to /satellite is pushed here.
+  const satDot = document.getElementById('sat-dot');
+  const satLabel = document.getElementById('sat-label');
+
+  const eventSource = new EventSource(`${API_BASE}/satellite/stream`);
+
+  eventSource.onopen = () => {
+    satDot.classList.add('connected');
+    satLabel.textContent = 'SATÉLITE: CONECTADO';
+  };
+
+  eventSource.onerror = () => {
+    satDot.classList.remove('connected');
+    satLabel.textContent = 'SATÉLITE: AGUARDANDO';
+  };
+
+  eventSource.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    plotSatelliteMarker(data);
+  };
 </script>
 
 </body>
