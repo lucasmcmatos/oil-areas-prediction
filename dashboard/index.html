@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Oil Probability Telemetry — OBSAT</title>
+<title>Telemetria de Probabilidade de Petróleo — OBSAT</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
@@ -203,6 +203,14 @@
   }
 
   hr { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
+
+  .leaflet-tooltip {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+  .leaflet-tooltip::before { display: none !important; }
 </style>
 </head>
 <body>
@@ -212,16 +220,16 @@
 <div id="panel">
   <div>
     <h1>OIL<span>SAT</span> // TELEMETRY</h1>
-    <div class="subtitle">BRAZILIAN COAST — METHANE/PRESSURE SURVEY</div>
+    <div class="subtitle">COSTA BRASILEIRA — LEVANTAMENTO DE METANO/PRESSÃO</div>
   </div>
 
   <div class="field">
-    <label>METHANE (ppm) <span class="value" id="methane-value">1.90</span></label>
+    <label>METANO (ppm) <span class="value" id="methane-value">1.90</span></label>
     <input type="range" id="methane" min="1.7" max="2.6" step="0.01" value="1.90" />
   </div>
 
   <div class="field">
-    <label>PRESSURE (hPa) <span class="value" id="pressure-value">1013.0</span></label>
+    <label>PRESSÃO (hPa) <span class="value" id="pressure-value">1013.0</span></label>
     <input type="range" id="pressure" min="1010" max="1020" step="0.1" value="1013.0" />
   </div>
 
@@ -235,21 +243,21 @@
     <input type="number" id="longitude" step="0.0001" value="-43.00" />
   </div>
 
-  <div class="subtitle">Click the map to set latitude/longitude.</div>
+  <div class="subtitle">Clique no mapa para definir latitude/longitude.</div>
 
-  <button class="primary" id="analyze-btn">ANALYZE POINT</button>
-  <button class="secondary" id="scan-btn">SCAN VISIBLE AREA</button>
-  <button id="clear-btn">CLEAR MARKERS</button>
+  <button class="primary" id="analyze-btn">ANALISAR PONTO</button>
+  <button class="secondary" id="scan-btn">VARRER ÁREA VISÍVEL</button>
+  <button id="clear-btn">LIMPAR MARCADORES</button>
 
-  <div id="result">Awaiting reading&hellip;</div>
+  <div id="result">Aguardando leitura&hellip;</div>
 
   <hr />
 
   <div class="legend">
-    <div class="row"><span class="dot low"></span> &lt; 30% — low</div>
-    <div class="row"><span class="dot moderate"></span> 30–70% — moderate</div>
-    <div class="row"><span class="dot high"></span> &gt; 70% — high</div>
-    <div class="row"><span class="dot anchor"></span> known field (reference)</div>
+    <div class="row"><span class="dot low"></span> &lt; 30% — baixo</div>
+    <div class="row"><span class="dot moderate"></span> 30–70% — moderado</div>
+    <div class="row"><span class="dot high"></span> &gt; 70% — alto</div>
+    <div class="row"><span class="dot anchor"></span> campo conhecido (referência)</div>
   </div>
 
   <div id="api-url">API: <span id="api-url-text"></span></div>
@@ -314,16 +322,32 @@
 
   const readingMarkers = [];
   const scanMarkers = [];
+  let pendingMarker = null;
 
   map.on('click', (event) => {
     latitudeInput.value = event.latlng.lat.toFixed(4);
     longitudeInput.value = event.latlng.lng.toFixed(4);
+    if (pendingMarker) map.removeLayer(pendingMarker);
+    pendingMarker = L.circleMarker([event.latlng.lat, event.latlng.lng], {
+      radius: 9,
+      color: '#7c8a9a',
+      fillColor: '#4a5568',
+      fillOpacity: 0.5,
+      weight: 2,
+      dashArray: '5 5',
+    }).bindTooltip('Aguardando análise…').addTo(map);
   });
 
   function colorForClassification(classification) {
     if (classification === 'high') return '#ff5a5a';
     if (classification === 'moderate') return '#ff9f1c';
     return '#3adbc1';
+  }
+
+  function classificationPt(classification) {
+    if (classification === 'high') return 'ALTO';
+    if (classification === 'moderate') return 'MODERADO';
+    return 'BAIXO';
   }
 
   function setResult(text, classification) {
@@ -339,7 +363,7 @@
       pressure_hpa: parseFloat(pressureInput.value),
     };
 
-    setResult('Querying model...', '');
+    setResult('Consultando modelo...', '');
 
     try {
       const response = await fetch(`${API_BASE}/predict`, {
@@ -350,22 +374,49 @@
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
 
+      if (pendingMarker) { map.removeLayer(pendingMarker); pendingMarker = null; }
+
+      const color = colorForClassification(data.classification);
+      const source = 'Manual';
+      const tooltipHtml = `
+        <div style="background:#10151d;border:1px solid ${color};border-radius:5px;
+                    padding:8px 11px;font-family:'IBM Plex Mono',monospace;
+                    font-size:0.72rem;line-height:1.85;color:#d7dee6;min-width:200px;">
+          <div style="color:#ff9f1c;font-size:0.67rem;font-weight:600;
+                      letter-spacing:0.09em;border-bottom:1px solid #1e2733;
+                      margin-bottom:5px;padding-bottom:4px;">
+            ◈ ${source.toUpperCase()}
+          </div>
+          <div style="display:grid;grid-template-columns:1fr auto;gap:1px 10px;">
+            <span style="color:#7c8a9a;">Metano (CH&#8324;)</span>
+            <span>${payload.methane_ppm.toFixed(3)} ppm</span>
+            <span style="color:#7c8a9a;">Press&atilde;o</span>
+            <span>${payload.pressure_hpa.toFixed(1)} hPa</span>
+            <span style="color:#7c8a9a;">Latitude</span>
+            <span>${payload.latitude.toFixed(4)}&deg;</span>
+            <span style="color:#7c8a9a;">Longitude</span>
+            <span>${payload.longitude.toFixed(4)}&deg;</span>
+          </div>
+          <div style="border-top:1px solid #1e2733;margin-top:6px;padding-top:5px;
+                      color:${color};font-size:0.85rem;font-weight:700;letter-spacing:0.03em;">
+            ${data.oil_probability_percent}% &mdash; ${classificationPt(data.classification)}
+          </div>
+        </div>`;
+
       const marker = L.circleMarker([payload.latitude, payload.longitude], {
         radius: 9,
-        color: colorForClassification(data.classification),
-        fillColor: colorForClassification(data.classification),
+        color: color,
+        fillColor: color,
         fillOpacity: 0.85,
-      }).bindTooltip(
-        `${data.oil_probability_percent}% — ${data.classification.toUpperCase()}`
-      ).addTo(map);
+      }).bindTooltip(tooltipHtml, { sticky: false }).addTo(map);
       readingMarkers.push(marker);
 
       setResult(
-        `OIL PROBABILITY: ${data.oil_probability_percent}%\nCLASS: ${data.classification.toUpperCase()}\nLAT ${payload.latitude.toFixed(4)}  LON ${payload.longitude.toFixed(4)}`,
+        `PROB. DE PETRÓLEO: ${data.oil_probability_percent}%\nCLASSE: ${classificationPt(data.classification)}\nLAT ${payload.latitude.toFixed(4)}  LON ${payload.longitude.toFixed(4)}`,
         data.classification
       );
     } catch (error) {
-      setResult(`ERROR: ${error.message}\nIs the API running at ${API_BASE}?`, '');
+      setResult(`ERRO: ${error.message}\nA API está rodando em ${API_BASE}?`, '');
     }
   }
 
@@ -386,7 +437,7 @@
       }
     }
 
-    setResult(`Scanning ${points.length} points...`, '');
+    setResult(`Varrendo ${points.length} pontos...`, '');
 
     try {
       const response = await fetch(`${API_BASE}/predict/batch`, {
@@ -413,18 +464,19 @@
         scanMarkers.push(marker);
       });
 
-      setResult(`Scan complete: ${points.length} points plotted.`, '');
+      setResult(`Varredura concluída: ${points.length} pontos marcados.`, '');
     } catch (error) {
-      setResult(`ERROR: ${error.message}\nIs the API running at ${API_BASE}?`, '');
+      setResult(`ERRO: ${error.message}\nA API está rodando em ${API_BASE}?`, '');
     }
   }
 
   function clearMarkers() {
+    if (pendingMarker) { map.removeLayer(pendingMarker); pendingMarker = null; }
     readingMarkers.forEach((m) => map.removeLayer(m));
     readingMarkers.length = 0;
     scanMarkers.forEach((m) => map.removeLayer(m));
     scanMarkers.length = 0;
-    setResult('Awaiting reading...', '');
+    setResult('Aguardando leitura...', '');
   }
 
   document.getElementById('analyze-btn').addEventListener('click', analyzePoint);
